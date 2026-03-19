@@ -48,11 +48,6 @@ This repository currently focuses on the **frontend implementation** of the syst
 - Background-image based authentication screens
 - Role entry testing for Customer / Specialist / Admin
 
-### Routing and State
-- Route-based page switching
-- Authentication store using Pinia
-- Role-aware redirect logic
-
 ---
 
 ## Project Structure
