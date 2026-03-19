@@ -1,22 +1,71 @@
-# Vue.js Web Application Example
+# Schedly Frontend
 
-This is a modern Vue.js 3 frontend application example that demonstrates a basic web application setup with Vite.
+A Vue 3-based frontend for **Schedly**, a specialist consultation booking system.  
+This project focuses on building a clean, role-based booking interface with modern authentication pages and scalable UI structure.
 
-## Project Description
+## Project Overview
 
-This project creates a responsive single-page application using Vue.js 3 and Vite. The application demonstrates Vue's component structure, reactivity system, and styling capabilities. The development server listens on port 3000 and provides hot module replacement for a smooth development experience.
+Schedly is a web-based consultation booking platform designed for three main user roles:
 
-## Environment
+- **Customer**
+- **Specialist**
+- **Administrator**
 
-This project runs on a Debian 12 system with Node.js and Vue.js 3.4.29, which is pre-configured in the Devbox environment. You don't need to worry about setting up Node.js, npm, or Vue dependencies yourself. The development environment includes all necessary tools for building and running Vue applications, including Vite for fast development and optimized builds. If you need to make adjustments to match your specific requirements, you can modify the configuration files accordingly.
+The frontend supports the core booking workflow, including:
 
-## Project Execution
+- user authentication
+- specialist browsing
+- booking creation
+- booking status tracking
+- role-based navigation
+- dashboard access for different user types
 
-**Development mode:** For normal development environment, simply enter Devbox and run `bash entrypoint.sh` in the terminal. This will start the Vite development server with hot-reload enabled.
+This repository currently focuses on the **frontend implementation** of the system.
 
-**Production mode:** After release, the project will be automatically packaged into a Docker image and deployed according to the `entrypoint.sh` script with production parameters (run `bash entrypoint.sh production`). This will build optimized static files and serve them using Vite's preview server.
+---
 
+## Tech Stack
 
-DevBox: Code. Build. Deploy. We've Got the Rest.
+- **Vue 3**
+- **Vue Router**
+- **Pinia**
+- **Vite**
+- **JavaScript**
+- **CSS**
 
-With DevBox, you can focus entirely on writing great code while we handle the infrastructure, scaling, and deployment. Seamless development from start to production. 
+---
+
+## Current Features
+
+### Authentication Pages
+- Login page
+- Register page
+- Dev login page for role-based testing during frontend development
+
+### UI Features
+- Custom auth page layouts
+- Reusable visual style for login / register pages
+- Background-image based authentication screens
+- Role entry testing for Customer / Specialist / Admin
+
+### Routing and State
+- Route-based page switching
+- Authentication store using Pinia
+- Role-aware redirect logic
+
+---
+
+## Project Structure
+
+```bash
+src/
+  api/              # API request logic
+  assets/           # static assets
+  components/       # reusable UI components
+  pages/            # page-level views
+    public/         # login, register, public pages
+    customer/       # customer pages
+    specialist/     # specialist pages
+    admin/          # admin pages
+  router/           # route definitions
+  stores/           # Pinia stores
