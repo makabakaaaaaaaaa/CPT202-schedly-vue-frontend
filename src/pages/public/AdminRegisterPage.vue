@@ -130,14 +130,14 @@ async function onSubmit() {
 </script>
 
 <template>
-  <section class="register-shell">
+  <section class="register-shell admin-register-shell">
     <div class="background-layer" aria-hidden="true"></div>
     <div class="overlay-layer" aria-hidden="true"></div>
 
     <div class="foreground-layer">
       <article class="register-card">
-        <h1>Create account</h1>
-        <p class="subtitle">Register with Schedly</p>
+        <h1>Create Admin account</h1>
+        <p class="subtitle">Register as Administrator</p>
 
         <form class="form" @submit.prevent="onSubmit">
           <label>
@@ -227,18 +227,19 @@ async function onSubmit() {
 
           <div v-if="error" class="error">{{ error }}</div>
 
-          <button class="btn" type="submit" :disabled="loading">
-            {{ loading ? "Registering..." : "Register" }}
+          <button class="btn btn--admin" type="submit" :disabled="loading">
+            {{ loading ? "Registering..." : "Register Admin" }}
           </button>
         </form>
 
         <p class="hint">
           Already have an account?
-          <router-link to="/login">Log in</router-link>
+          <router-link :to="{ name: 'expert-admin-login' }">Log in</router-link>
         </p>
-        <p class="hint alt-hint">
-          Not a Customer?
-          <router-link :to="{ name: 'admin-register' }">Admin Register</router-link>
+
+        <p class="hint alt-hint specialist-note">
+          Specialists cannot self-register. Please contact admin:
+          admin@example.com
         </p>
       </article>
     </div>
@@ -248,6 +249,8 @@ async function onSubmit() {
 <style scoped>
 .register-shell {
   position: relative;
+  width: 100%;
+  height: 100vh;
   min-height: 100vh;
   overflow: hidden;
   background: #f0eae5;
@@ -257,12 +260,13 @@ async function onSubmit() {
 .overlay-layer {
   position: absolute;
   inset: 0;
+  height: 100%;
 }
 
 .background-layer {
-  background-image: url("/images/register-bg.jpg");
+  background-image: url("/images/register-02-bg.jpg");
   background-size: cover;
-  background-position: 16% 56%;
+  background-position: center;
   background-repeat: no-repeat;
   filter: blur(6px) brightness(0.96);
   transform: scale(1.03);
@@ -385,6 +389,11 @@ input::placeholder {
   cursor: pointer;
 }
 
+.btn--admin {
+  border-color: #a94442;
+  background: #a94442;
+}
+
 .btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
@@ -433,6 +442,11 @@ input::placeholder {
   margin-top: 10px;
 }
 
+.specialist-note {
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -447,7 +461,8 @@ input::placeholder {
 
 @media (max-width: 900px) {
   .background-layer {
-    background-position: 24% 56%;
+    /* Keep centered crop on mobile as well. */
+    background-position: center;
   }
 
   .foreground-layer {

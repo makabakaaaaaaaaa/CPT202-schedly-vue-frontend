@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { onBeforeUnmount, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
@@ -95,13 +95,13 @@ async function onSubmit() {
 </script>
 
 <template>
-  <section class="login-shell">
+  <section class="login-shell expert-shell">
     <div class="background-layer" aria-hidden="true"></div>
 
     <div class="foreground-layer">
       <article class="login-card">
-        <h1>Welcome back</h1>
-        <p class="subtitle">Log in to Schedly</p>
+        <h1>Welcome back, Team</h1>
+        <p class="subtitle">Log in as Expert/Admin</p>
         <div class="login-mode" role="tablist" aria-label="Login methods">
           <button
             type="button"
@@ -173,20 +173,19 @@ async function onSubmit() {
 
           <div v-if="error" class="error">{{ error }}</div>
 
-          <button class="btn" type="submit" :disabled="loading">
+          <button class="btn btn--team" type="submit" :disabled="loading">
             {{ loading ? "Logging in..." : "Log in" }}
           </button>
         </form>
 
         <p class="hint">
-          Don’t have an account?
-          <router-link to="/register">Sign up</router-link>
+          No Admin account?
+          <router-link :to="{ name: 'admin-register' }">Sign up</router-link>
         </p>
+
         <p class="hint alt-hint">
-          Not Customer?
-          <router-link :to="{ name: 'expert-admin-login' }"
-            >Expert/Admin</router-link
-          >
+          Not Expert/Admin?
+          <router-link :to="{ name: 'login' }">Log as Customer</router-link>
         </p>
       </article>
     </div>
@@ -207,9 +206,9 @@ async function onSubmit() {
 }
 
 .background-layer {
-  background-image: url("/images/login-bg.jpg");
+  background-image: url("/images/login-02-bg.jpg");
   background-size: cover;
-  background-position: 16% 56%;
+  background-position: center;
   background-repeat: no-repeat;
   filter: blur(6px) brightness(0.9);
   transform: scale(1.03);
@@ -228,6 +227,8 @@ async function onSubmit() {
 
 .login-card {
   width: clamp(280px, 23vw, 330px);
+  height: auto;
+  min-height: 0;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 0;
@@ -269,9 +270,9 @@ h1 {
 }
 
 .mode-btn--active {
-  border-color: #d9533c;
+  border-color: #a94442;
   color: #202124;
-  background: #f8e1dd;
+  background: #f3d9d8;
 }
 
 .form {
@@ -304,13 +305,18 @@ input::placeholder {
 .btn {
   margin-top: 6px;
   height: 46px;
-  border: 1px solid #d9533c;
+  border: 1px solid #a94442;
   border-radius: 0;
-  background: #d9533c;
+  background: #a94442;
   color: #ffffff;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.btn--team {
+  border-color: #a94442;
+  background: #a94442;
 }
 
 .btn:disabled {
@@ -375,7 +381,7 @@ input::placeholder {
 
 @media (max-width: 900px) {
   .background-layer {
-    background-position: 24% 56%;
+    background-position: center;
   }
 
   .foreground-layer {

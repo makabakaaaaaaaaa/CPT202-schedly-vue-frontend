@@ -47,7 +47,7 @@ export const useAuthStore = defineStore('auth', {
       // 有后端时再用 /me 覆盖本地数据；无后端则保留本地 user
       try {
         const me = await api.getMe()
-        this.setUser(me.user ?? me)
+        this.setUser(me.user ?? null)
       } catch {
         if (!this.user) {
           this.setUser(null)
@@ -56,6 +56,12 @@ export const useAuthStore = defineStore('auth', {
     },
     async login({ email, password }) {
       const res = await api.login({ email, password })
+      this.setToken(res.token)
+      this.setUser(res.user)
+      return res
+    },
+    async loginByEmailCode({ email, verificationCode }) {
+      const res = await api.loginByEmailCode({ email, verificationCode })
       this.setToken(res.token)
       this.setUser(res.user)
       return res
@@ -84,4 +90,3 @@ export const useAuthStore = defineStore('auth', {
     }
   }
 })
-

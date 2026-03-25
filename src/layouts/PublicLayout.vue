@@ -3,8 +3,22 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 
 const route = useRoute();
-const isAuthHeroPage = computed(
-  () => route.name === "login" || route.name === "register"
+const authRouteNames = [
+  "login",
+  "register",
+  "admin-register",
+  "dev-login",
+  "expert-admin-login",
+  // Keep compatibility with component-style names if route naming changes later.
+  "LoginPage",
+  "RegisterPage",
+  "AdminRegisterPage",
+  "DevLoginPage",
+  "ExpertAdminLoginPage",
+];
+
+const isAuthHeroPage = computed(() =>
+  authRouteNames.includes(String(route.name))
 );
 </script>
 
@@ -63,6 +77,7 @@ const isAuthHeroPage = computed(
 }
 
 .public__main--login {
+  width: 100%;
   max-width: none;
   margin: 0;
   padding: 0;
