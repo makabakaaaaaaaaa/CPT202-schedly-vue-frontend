@@ -1,19 +1,16 @@
-# UI Development Log
-
-## Date
+UI Development Log
+Date
 2026-03-19
-
-## Focus
+Focus
 Worked on public pages under:
-
 ```bash
 src/pages/public
-
+```
 Main pages:
-
 Login
 Register
 Dev login
+---
 Work Completed
 Login Page
 Redesigned layout into a full auth-style page
@@ -33,6 +30,7 @@ Converted all text to English
 Added a clean white card container
 Redesigned role buttons into orange action buttons
 Improved layout and spacing for testing use
+---
 Notes
 Focused only on UI and layout (no logic changes)
 Worked on making login and register pages visually consistent
@@ -41,20 +39,17 @@ Next Steps
 Further align register page with login style
 Improve responsive layout
 Prepare pages for backend integration
+---
 Date
-
 2026-03-26
-
 Focus
-
 Worked on both public pages and admin-side management pages, while also supplementing the API documentation.
-
 Main areas:
-
 Public auth pages
 Shared navigation / sidebar
 Specialist management related pages
 API documentation updates
+---
 Work Completed
 Login / Register Pages
 Further updated the login and register interfaces
@@ -82,6 +77,7 @@ Supplemented the API documentation for slot management:
 added admin create slot API
 added admin update slot API
 added admin delete slot API
+---
 Notes
 Continued focusing on improving front-end structure, layout, and visual consistency
 Strengthened role distinction in the authentication entry points
