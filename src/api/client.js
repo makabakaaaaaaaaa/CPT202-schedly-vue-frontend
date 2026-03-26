@@ -75,6 +75,20 @@ export function extractDataPayload(body) {
   return body
 }
 
+/** 鍏煎锛氬崟涓璞℃垨鏁扮粍锛屼紭鍏堣繑鍥?Result.data */
+export function extractDataOrListPayload(body) {
+  if (body == null) return null
+  throwIfHtmlString(body)
+  if (Array.isArray(body)) return body
+  if (typeof body !== 'object') return body
+  if (Object.prototype.hasOwnProperty.call(body, 'data')) {
+    const data = body.data
+    if (Array.isArray(data)) return data
+    if (data != null && typeof data === 'object') return data
+  }
+  return body
+}
+
 /** 分页：items + total + page + pageSize，兼容 Result 包裹 */
 export function extractPagePayload(body) {
   const empty = { items: [], total: 0, page: 1, pageSize: 10 }
@@ -187,5 +201,5 @@ export const api = {
   adminDeleteExpertise: (id) =>
     request(http.delete(`/admin/expertise/${id}`)).then(extractDataPayload),
 
-  quotePricing: (payload) => request(http.post('/pricing/quote', payload)).then(extractDataPayload)
+  quotePricing: (payload) => request(http.post('/pricing/quote', payload)).then(extractDataOrListPayload)
 }

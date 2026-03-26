@@ -220,6 +220,20 @@ function createQuoteRecord(source, fallback) {
   }
 }
 
+function normalizeQuoteResponse(response, fallback) {
+  const rows = Array.isArray(response) ? response : response ? [response] : []
+  return rows
+    .filter((row) => row && typeof row === 'object')
+    .map((row) =>
+      createQuoteRecord(row, {
+        specialistId: fallback.specialistId,
+        specialistName: fallback.specialistName,
+        duration: row?.duration ?? fallback.duration ?? null,
+        type: row?.type ?? fallback.type ?? ''
+      })
+    )
+}
+
 function dedupeQuoteResults(rows) {
   const map = new Map()
   for (const row of rows) {
@@ -306,15 +320,30 @@ async function onQuote() {
         duration: Number(duration.value),
         type: String(type.value).trim().toLowerCase()
       })
-      const record = createQuoteRecord(response, {
+      const records = normalizeQuoteResponse(response, {
         specialistId: resolved.specialistId,
         specialistName: resolved.specialistName,
         duration: Number(duration.value),
         type: String(type.value).trim().toLowerCase()
       })
-      quote.value = response
+      const [firstRecord] = records
+
+      if (!firstRecord) {
+        error.value = 'No quote available for the selected specialist and filters'
+        resultMode.value = 'single'
+        return
+      }
+
+      quote.value = {
+        specialistId: firstRecord.specialistId,
+        duration: firstRecord.duration,
+        type: firstRecord.type,
+        amount: firstRecord.amount,
+        currency: firstRecord.currency,
+        detail: firstRecord.detail
+      }
       resultMode.value = 'single'
-      appendHistoryItems([record])
+      appendHistoryItems([firstRecord])
       return
     }
 
@@ -326,7 +355,7 @@ async function onQuote() {
           duration: combo.duration,
           type: combo.type
         }).then((response) =>
-          createQuoteRecord(response, {
+          normalizeQuoteResponse(response, {
             specialistId: resolved.specialistId,
             specialistName: resolved.specialistName,
             duration: combo.duration,
@@ -336,7 +365,7 @@ async function onQuote() {
       )
     )
 
-    const successful = settled.filter((row) => row.status === 'fulfilled').map((row) => row.value)
+    const successful = settled.filter((row) => row.status === 'fulfilled').flatMap((row) => row.value)
     const normalizedResults = sortQuoteResults(dedupeQuoteResults(successful))
 
     if (!normalizedResults.length) {
