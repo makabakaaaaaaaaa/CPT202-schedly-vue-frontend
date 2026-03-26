@@ -170,6 +170,12 @@ export const api = {
     request(http.post(`/specialist/bookings/${id}/complete`)).then(extractDataPayload),
 
   adminListBookings: (params) => request(http.get('/admin/bookings', { params })).then(extractPagePayload),
+  adminGetBooking: (id) => request(http.get(`/admin/bookings/${id}`)).then(extractDataPayload),
+  adminListSlots: (params) => request(http.get('/admin/slots', { params })).then(extractListPayload),
+  adminCreateSlot: (payload) => request(http.post('/admin/slots', payload)).then(extractDataPayload),
+  adminUpdateSlot: (id, payload) =>
+    request(http.patch(`/admin/slots/${id}`, payload)).then(extractDataPayload),
+  adminDeleteSlot: (id) => request(http.delete(`/admin/slots/${id}`)).then(extractDataPayload),
   adminCreateSpecialist: (payload) => request(http.post('/admin/specialists', payload)).then(extractDataPayload),
   adminUpdateSpecialist: (id, payload) =>
     request(http.patch(`/admin/specialists/${id}`, payload)).then(extractDataPayload),

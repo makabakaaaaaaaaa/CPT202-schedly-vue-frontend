@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/client'
 
 const expertiseList = ref([])
@@ -17,11 +17,35 @@ const form = ref({
 })
 
 const creating = ref(false)
-const statusBusy = ref('')
+const updateLoading = ref(false)
+const deletingId = ref('')
+const nameFocused = ref(false)
+const nameLimitError = ref('')
+const bioFocused = ref(false)
+const bioLimitError = ref('')
+const editNameFocused = ref(false)
+const editNameLimitError = ref('')
+const editBioFocused = ref(false)
+const editBioLimitError = ref('')
 
 const expertiseOpen = ref(false)
 const expertiseSearch = ref('')
 const expertiseFieldRef = ref(null)
+const editOpen = ref(false)
+const editExpertiseOpen = ref(false)
+const editExpertiseSearch = ref('')
+const editExpertiseFieldRef = ref(null)
+const editOriginalStatus = ref('Active')
+const editForm = ref({
+  id: '',
+  name: '',
+  price: '',
+  bio: '',
+  expertiseIds: [],
+  status: 'Active'
+})
+const NAME_MAX = 50
+const BIO_MAX_WORDS = 1000
 
 const expertiseMap = computed(() => {
   const map = new Map()
@@ -42,6 +66,9 @@ const filteredExpertiseOptions = computed(() => {
 const selectedExpertise = computed(() =>
   (form.value.expertiseIds || []).map((id) => expertiseMap.value.get(String(id)) || { id, name: id })
 )
+const selectedEditExpertise = computed(() =>
+  (editForm.value.expertiseIds || []).map((id) => expertiseMap.value.get(String(id)) || { id, name: id })
+)
 
 const filteredSpecialists = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -49,13 +76,41 @@ const filteredSpecialists = computed(() => {
   if (!q) return rows
   return rows.filter((row) => String(row?.name ?? '').toLowerCase().includes(q))
 })
+const filteredEditExpertiseOptions = computed(() => {
+  const q = editExpertiseSearch.value.trim().toLowerCase()
+  if (!q) return expertiseList.value
+  return (expertiseList.value || []).filter((item) => String(item?.name ?? '').toLowerCase().includes(q))
+})
 
 const totalSpecialists = computed(() => Math.max(Number(page.value?.total) || 0, (page.value?.items || []).length))
+const specialistCountLabel = computed(() => {
+  const count = totalSpecialists.value
+  return `${count} specialist${count === 1 ? '' : 's'}`
+})
+const showNameHelper = computed(() => {
+  return nameFocused.value || !!form.value.name.length || !!nameLimitError.value
+})
+const showBioHelper = computed(() => {
+  return bioFocused.value || !!form.value.bio.length || !!bioLimitError.value
+})
+const bioWordCount = computed(() => countWords(form.value.bio))
+const showEditNameHelper = computed(() => {
+  return editNameFocused.value || !!editNameLimitError.value
+})
+const showEditBioHelper = computed(() => {
+  return editBioFocused.value || !!editBioLimitError.value
+})
+const editBioWordCount = computed(() => countWords(editForm.value.bio))
 
 const expertisePlaceholder = computed(() => {
   if (!form.value.expertiseIds.length) return 'Select expertise'
   if (form.value.expertiseIds.length === 1) return selectedExpertise.value[0]?.name || '1 selected'
   return `${form.value.expertiseIds.length} expertise selected`
+})
+const editExpertisePlaceholder = computed(() => {
+  if (!editForm.value.expertiseIds.length) return 'Select expertise'
+  if (editForm.value.expertiseIds.length === 1) return selectedEditExpertise.value[0]?.name || '1 selected'
+  return `${editForm.value.expertiseIds.length} expertise selected`
 })
 
 function normalizeExpertiseIds(value) {
@@ -85,17 +140,103 @@ function removeExpertise(id) {
   form.value.expertiseIds = normalizeExpertiseIds(form.value.expertiseIds).filter((itemId) => itemId !== targetId)
 }
 
+function toggleEditExpertisePicker() {
+  editExpertiseOpen.value = !editExpertiseOpen.value
+}
+
+function closeEditExpertisePicker() {
+  editExpertiseOpen.value = false
+}
+
+function toggleEditExpertise(id) {
+  const targetId = String(id)
+  if (!targetId) return
+  const set = new Set(normalizeExpertiseIds(editForm.value.expertiseIds))
+  if (set.has(targetId)) set.delete(targetId)
+  else set.add(targetId)
+  editForm.value.expertiseIds = [...set]
+}
+
+function removeEditExpertise(id) {
+  const targetId = String(id)
+  editForm.value.expertiseIds = normalizeExpertiseIds(editForm.value.expertiseIds).filter((itemId) => itemId !== targetId)
+}
+
 function handleGlobalClick(event) {
-  const host = expertiseFieldRef.value
-  if (!host) return
-  if (host.contains(event.target)) return
-  closeExpertisePicker()
+  const createHost = expertiseFieldRef.value
+  if (createHost && !createHost.contains(event.target)) {
+    closeExpertisePicker()
+  }
+
+  const editHost = editExpertiseFieldRef.value
+  if (editHost && !editHost.contains(event.target)) {
+    closeEditExpertisePicker()
+  }
 }
 
 function formatPrice(value) {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return '--'
   return `$${amount.toFixed(2)}`
+}
+
+function onNameFocus() {
+  nameFocused.value = true
+}
+
+function onNameBlur() {
+  nameFocused.value = false
+  if (form.value.name.length <= NAME_MAX) {
+    nameLimitError.value = ''
+  }
+}
+
+function onBioFocus() {
+  bioFocused.value = true
+}
+
+function onBioBlur() {
+  bioFocused.value = false
+  if (bioWordCount.value <= BIO_MAX_WORDS) {
+    bioLimitError.value = ''
+  }
+}
+
+function onEditNameFocus() {
+  editNameFocused.value = true
+}
+
+function onEditNameBlur() {
+  editNameFocused.value = false
+  if (editForm.value.name.length <= NAME_MAX) {
+    editNameLimitError.value = ''
+  }
+}
+
+function onEditBioFocus() {
+  editBioFocused.value = true
+}
+
+function onEditBioBlur() {
+  editBioFocused.value = false
+  if (editBioWordCount.value <= BIO_MAX_WORDS) {
+    editBioLimitError.value = ''
+  }
+}
+
+function countWords(value) {
+  const text = String(value || '').trim()
+  if (!text) return 0
+  return text.split(/\s+/).filter(Boolean).length
+}
+
+function trimToWordLimit(value, maxWords) {
+  const text = String(value || '')
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  const words = trimmed.split(/\s+/)
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ')
 }
 
 function specialistExpertiseNames(row) {
@@ -122,9 +263,9 @@ function specialistStatus(row) {
 
 function specialistStatusClass(row) {
   const status = specialistStatus(row).toLowerCase()
-  if (status === 'active') return 'status-badge status-badge--active'
-  if (status === 'inactive') return 'status-badge status-badge--inactive'
-  return 'status-badge'
+  if (status === 'active') return 'status-pill'
+  if (status === 'inactive') return 'status-pill status-pill--off'
+  return 'status-pill'
 }
 
 async function loadExpertise() {
@@ -171,6 +312,10 @@ async function onCreate() {
       bio: form.value.bio.trim() || undefined
     })
     form.value = { name: '', price: '', bio: '', expertiseIds: [] }
+    nameFocused.value = false
+    nameLimitError.value = ''
+    bioFocused.value = false
+    bioLimitError.value = ''
     expertiseSearch.value = ''
     closeExpertisePicker()
     await loadSpecialists()
@@ -182,24 +327,95 @@ async function onCreate() {
   }
 }
 
-async function setStatus(id, status) {
-  statusBusy.value = `${id}:${status}`
+function openEdit(row) {
+  editForm.value = {
+    id: row?.id != null ? String(row.id) : '',
+    name: String(row?.name ?? '').trim(),
+    price: row?.price == null ? '' : String(row.price),
+    bio: String(row?.bio ?? '').trim(),
+    expertiseIds: normalizeExpertiseIds(row?.expertiseIds),
+    status: specialistStatus(row)
+  }
+  editOriginalStatus.value = specialistStatus(row)
+  editExpertiseSearch.value = ''
+  editExpertiseOpen.value = false
+  editNameFocused.value = false
+  editNameLimitError.value = ''
+  editBioFocused.value = false
+  editBioLimitError.value = ''
+  editOpen.value = true
+}
+
+function closeEdit() {
+  if (updateLoading.value) return
+  editOpen.value = false
+  editExpertiseOpen.value = false
+  editExpertiseSearch.value = ''
+  editNameFocused.value = false
+  editNameLimitError.value = ''
+  editBioFocused.value = false
+  editBioLimitError.value = ''
+}
+
+async function onSaveEdit() {
   error.value = ''
   success.value = ''
+
+  if (!editForm.value.id) {
+    error.value = 'Missing specialist ID.'
+    return
+  }
+  if (!editForm.value.name.trim()) {
+    error.value = 'Please enter a name.'
+    return
+  }
+  if (!editForm.value.expertiseIds.length) {
+    error.value = 'Please select at least one expertise item.'
+    return
+  }
+
+  updateLoading.value = true
   try {
-    await api.adminSetSpecialistStatus(id, { status })
+    const price = editForm.value.price === '' ? undefined : Number(editForm.value.price)
+    await api.adminUpdateSpecialist(editForm.value.id, {
+      name: editForm.value.name.trim(),
+      expertiseIds: normalizeExpertiseIds(editForm.value.expertiseIds),
+      price: Number.isFinite(price) ? price : undefined,
+      bio: editForm.value.bio.trim() || undefined
+    })
+    if (editForm.value.status !== editOriginalStatus.value) {
+      await api.adminSetSpecialistStatus(editForm.value.id, { status: editForm.value.status })
+    }
+
     await loadSpecialists()
-    success.value = `Status updated to ${status}.`
+    success.value = `Specialist ${editForm.value.id} updated successfully.`
+    closeEdit()
   } catch (e) {
-    error.value = e?.message || 'Failed to update status'
+    error.value = e?.message || 'Failed to update specialist'
   } finally {
-    statusBusy.value = ''
+    updateLoading.value = false
   }
 }
 
-function onEditReserved(row) {
-  const specialistId = row?.id != null ? String(row.id) : 'N/A'
-  success.value = `Edit flow reserved for specialist ${specialistId}. PATCH /admin/specialists/{id} can be wired here.`
+async function onDelete(row) {
+  const specialistId = row?.id != null ? String(row.id) : ''
+  if (!specialistId) {
+    error.value = 'This specialist is missing an ID and cannot be deleted.'
+    return
+  }
+
+  const confirmed = window.confirm(`Delete specialist "${specialistId}"?`)
+  if (!confirmed) return
+
+  error.value = ''
+  success.value = ''
+  deletingId.value = specialistId
+
+  try {
+    error.value = `Delete endpoint is not available yet for specialist ${specialistId}.`
+  } finally {
+    deletingId.value = ''
+  }
 }
 
 onMounted(async () => {
@@ -211,6 +427,68 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleGlobalClick)
 })
+
+watch(
+  () => form.value.name,
+  (val) => {
+    if (val.length > NAME_MAX) {
+      form.value.name = val.slice(0, NAME_MAX)
+      nameLimitError.value = `Maximum ${NAME_MAX} characters allowed.`
+      return
+    }
+
+    if (val.length < NAME_MAX) {
+      nameLimitError.value = ''
+    }
+  }
+)
+
+watch(
+  () => form.value.bio,
+  (val) => {
+    const wordCount = countWords(val)
+    if (wordCount > BIO_MAX_WORDS) {
+      form.value.bio = trimToWordLimit(val, BIO_MAX_WORDS)
+      bioLimitError.value = `Maximum ${BIO_MAX_WORDS} words allowed.`
+      return
+    }
+
+    if (wordCount < BIO_MAX_WORDS) {
+      bioLimitError.value = ''
+    }
+  }
+)
+
+watch(
+  () => editForm.value.name,
+  (val) => {
+    if (val.length > NAME_MAX) {
+      editForm.value.name = val.slice(0, NAME_MAX)
+      editNameLimitError.value = `Maximum ${NAME_MAX} characters allowed.`
+      return
+    }
+
+    if (val.length < NAME_MAX) {
+      editNameLimitError.value = ''
+    }
+  }
+)
+
+watch(
+  () => editForm.value.bio,
+  (val) => {
+    const wordCount = countWords(val)
+    if (wordCount > BIO_MAX_WORDS) {
+      editForm.value.bio = trimToWordLimit(val, BIO_MAX_WORDS)
+      editBioLimitError.value = `Maximum ${BIO_MAX_WORDS} words allowed.`
+      return
+    }
+
+    if (wordCount < BIO_MAX_WORDS) {
+      editBioLimitError.value = ''
+    }
+  }
+)
 </script>
 
 <template>
@@ -231,7 +509,26 @@ onBeforeUnmount(() => {
       <div class="create-grid">
         <label class="field">
           <span class="label">Name</span>
-          <input v-model="form.name" class="input" placeholder="Enter specialist name" />
+          <input
+            v-model="form.name"
+            class="input"
+            type="text"
+            placeholder="Enter specialist name"
+            maxlength="50"
+            @focus="onNameFocus"
+            @blur="onNameBlur"
+          />
+
+          <div
+            v-if="showNameHelper"
+            class="limit-helper"
+            :class="{ 'limit-helper--error': nameLimitError }"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="limit-helper__text">{{ nameLimitError || `Maximum ${NAME_MAX} characters` }}</p>
+            <p class="limit-helper__count">{{ form.name.length }}/{{ NAME_MAX }}</p>
+          </div>
         </label>
 
         <label class="field">
@@ -253,7 +550,20 @@ onBeforeUnmount(() => {
             class="input input--area"
             rows="3"
             placeholder="Add specialist bio"
+            @focus="onBioFocus"
+            @blur="onBioBlur"
           />
+
+          <div
+            v-if="showBioHelper"
+            class="limit-helper"
+            :class="{ 'limit-helper--error': bioLimitError }"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="limit-helper__text">{{ bioLimitError || `Maximum ${BIO_MAX_WORDS} words` }}</p>
+            <p class="limit-helper__count">{{ bioWordCount }}/{{ BIO_MAX_WORDS }} words</p>
+          </div>
         </label>
       </div>
 
@@ -321,9 +631,8 @@ onBeforeUnmount(() => {
       <div class="list-toolbar">
         <div class="toolbar-title">
           <h2 class="card-title">Specialists</h2>
-          <p class="list-note">
-            Total: {{ totalSpecialists }}
-            <span v-if="searchQuery"> | Matched: {{ filteredSpecialists.length }}</span>
+          <p v-if="searchQuery" class="list-note">
+            Matched: {{ filteredSpecialists.length }}
           </p>
         </div>
         <div class="toolbar-actions">
@@ -338,6 +647,10 @@ onBeforeUnmount(() => {
             {{ loading ? 'Loading...' : 'Refresh' }}
           </button>
         </div>
+      </div>
+
+      <div class="toolbar-meta">
+        <span class="meta-pill">{{ specialistCountLabel }}</span>
       </div>
 
       <div v-if="loading && !(page.items || []).length" class="state muted">Loading...</div>
@@ -387,24 +700,16 @@ onBeforeUnmount(() => {
               </td>
               <td>
                 <div class="row-actions">
-                  <button type="button" class="action-btn" @click="onEditReserved(s)">
+                  <button type="button" class="action-btn" :disabled="updateLoading || deletingId === `${s.id}`" @click="openEdit(s)">
                     Edit
                   </button>
                   <button
                     type="button"
-                    class="action-btn action-btn--active"
-                    :disabled="statusBusy === `${s.id}:Active`"
-                    @click="setStatus(s.id, 'Active')"
-                  >
-                    Activate
-                  </button>
-                  <button
-                    type="button"
                     class="action-btn action-btn--danger"
-                    :disabled="statusBusy === `${s.id}:Inactive`"
-                    @click="setStatus(s.id, 'Inactive')"
+                    :disabled="updateLoading || deletingId === `${s.id}`"
+                    @click="onDelete(s)"
                   >
-                    Deactivate
+                    {{ deletingId === `${s.id}` ? 'Deleting...' : 'Delete' }}
                   </button>
                 </div>
               </td>
@@ -413,6 +718,173 @@ onBeforeUnmount(() => {
         </table>
       </div>
     </section>
+
+    <div v-if="editOpen" class="modal-backdrop" @click.self="closeEdit">
+      <section class="modal-card">
+        <div class="panel-head">
+          <h3 class="modal-title">Edit Specialist</h3>
+        </div>
+
+        <div class="detail-list">
+          <div class="detail-row">
+            <span class="detail-key">Specialist ID</span>
+            <span class="detail-value mono">{{ editForm.id || '--' }}</span>
+          </div>
+        </div>
+
+        <div class="create-grid">
+          <label class="field">
+            <span class="label">Name</span>
+            <input
+              v-model="editForm.name"
+              class="input"
+              type="text"
+              placeholder="Enter specialist name"
+              maxlength="50"
+              @focus="onEditNameFocus"
+              @blur="onEditNameBlur"
+            />
+
+            <div
+              v-if="showEditNameHelper"
+              class="limit-helper"
+              :class="{ 'limit-helper--error': editNameLimitError }"
+              role="status"
+              aria-live="polite"
+            >
+              <p class="limit-helper__text">{{ editNameLimitError || `Maximum ${NAME_MAX} characters` }}</p>
+              <p class="limit-helper__count">{{ editForm.name.length }}/{{ NAME_MAX }}</p>
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="label">Default Price</span>
+            <input
+              v-model="editForm.price"
+              class="input"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Enter price"
+            />
+          </label>
+
+          <label class="field field--full">
+            <span class="label">Bio</span>
+            <textarea
+              v-model="editForm.bio"
+              class="input input--area"
+              rows="3"
+              placeholder="Update specialist bio"
+              @focus="onEditBioFocus"
+              @blur="onEditBioBlur"
+            />
+
+            <div
+              v-if="showEditBioHelper"
+              class="limit-helper"
+              :class="{ 'limit-helper--error': editBioLimitError }"
+              role="status"
+              aria-live="polite"
+            >
+              <p class="limit-helper__text">{{ editBioLimitError || `Maximum ${BIO_MAX_WORDS} words` }}</p>
+              <p class="limit-helper__count">{{ editBioWordCount }}/{{ BIO_MAX_WORDS }} words</p>
+            </div>
+          </label>
+        </div>
+
+        <div ref="editExpertiseFieldRef" class="field expertise-field">
+          <span class="label">Expertise</span>
+          <button
+            type="button"
+            class="multi-trigger"
+            :class="{ 'multi-trigger--open': editExpertiseOpen }"
+            @click="toggleEditExpertisePicker"
+          >
+            <span>{{ editExpertisePlaceholder }}</span>
+            <span class="multi-trigger__arrow">{{ editExpertiseOpen ? '^' : 'v' }}</span>
+          </button>
+
+          <div v-if="editExpertiseOpen" class="multi-panel">
+            <input
+              v-model.trim="editExpertiseSearch"
+              class="input input--search"
+              type="text"
+              placeholder="Search expertise"
+            />
+
+            <div class="multi-options">
+              <button
+                v-for="item in filteredEditExpertiseOptions"
+                :key="item.id"
+                type="button"
+                class="multi-option"
+                :class="{ 'multi-option--active': editForm.expertiseIds.includes(String(item.id)) }"
+                @click="toggleEditExpertise(item.id)"
+              >
+                <span>{{ item.name }}</span>
+                <span class="multi-option__state">
+                  {{ editForm.expertiseIds.includes(String(item.id)) ? 'Selected' : 'Select' }}
+                </span>
+              </button>
+
+              <div v-if="!filteredEditExpertiseOptions.length" class="multi-empty">
+                No expertise matched your search.
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedEditExpertise.length" class="selected-chips">
+            <button
+              v-for="item in selectedEditExpertise"
+              :key="item.id"
+              type="button"
+              class="selected-chip"
+              @click="removeEditExpertise(item.id)"
+            >
+              <span>{{ item.name }}</span>
+              <span class="selected-chip__remove">x</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">Status</span>
+          <div class="option-row">
+            <button
+              type="button"
+              class="option-btn option-btn--positive"
+              :class="{ 'option-btn--active-positive': editForm.status === 'Active' }"
+              @click="editForm.status = 'Active'"
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              class="option-btn option-btn--negative"
+              :class="{ 'option-btn--active-negative': editForm.status === 'Inactive' }"
+              @click="editForm.status = 'Inactive'"
+            >
+              Inactive
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-neutral modal-cancel" :disabled="updateLoading" @click="closeEdit">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn-primary btn-primary--fit modal-save"
+            :disabled="updateLoading"
+            @click="onSaveEdit"
+          >
+            {{ updateLoading ? 'Saving...' : 'Save Changes' }}
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -451,6 +923,10 @@ onBeforeUnmount(() => {
   margin: 0 0 12px;
   font-size: 16px;
   font-weight: 700;
+}
+
+.panel-head {
+  margin-bottom: 12px;
 }
 
 .create-grid {
@@ -494,6 +970,29 @@ onBeforeUnmount(() => {
   height: auto;
   padding: 10px 12px;
   resize: vertical;
+}
+
+.limit-helper {
+  border: 1px solid #ddd3cb;
+  background: #f8f5f2;
+  padding: 8px 10px;
+}
+
+.limit-helper--error {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: rgba(180, 35, 24, 0.08);
+}
+
+.limit-helper__text {
+  margin: 0;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.limit-helper__count {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .btn-primary {
@@ -541,7 +1040,8 @@ onBeforeUnmount(() => {
 }
 
 .banner {
-  margin-top: 12px;
+  margin-top: 14px;
+  margin-bottom: 14px;
   padding: 10px 12px;
   border-radius: 0;
   font-size: 13px;
@@ -550,6 +1050,7 @@ onBeforeUnmount(() => {
 .banner--error {
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
 }
 
 .banner--success {
@@ -665,6 +1166,49 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
+.option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-btn {
+  min-width: 108px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d8d1cb;
+  border-radius: 0;
+  background: #f8f5f2;
+  color: #374151;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.option-btn--positive {
+  border-color: rgba(34, 197, 94, 0.32);
+  background: rgba(34, 197, 94, 0.08);
+  color: #166534;
+}
+
+.option-btn--negative {
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
+}
+
+.option-btn--active-positive {
+  border-color: #166534;
+  background: #166534;
+  color: #ffffff;
+}
+
+.option-btn--active-negative {
+  border-color: #991b1b;
+  background: #991b1b;
+  color: #ffffff;
+}
+
 .list-toolbar {
   display: flex;
   justify-content: space-between;
@@ -680,6 +1224,22 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.toolbar-meta {
+  margin: 12px 0;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d8d1cb;
+  background: #f8f5f2;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .search-input {
@@ -774,30 +1334,22 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.status-badge {
+.status-pill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 76px;
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
-  border: 1px solid #d8d1cb;
-  background: #f8f5f2;
-  color: #374151;
+  border: 1px solid rgba(34, 197, 94, 0.32);
+  background: rgba(34, 197, 94, 0.08);
+  color: #166534;
   font-size: 12px;
   font-weight: 700;
 }
 
-.status-badge--active {
-  border-color: #111827;
-  background: #111827;
-  color: #ffffff;
-}
-
-.status-badge--inactive {
-  border-color: #a94442;
-  background: #a94442;
-  color: #ffffff;
+.status-pill--off {
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
 }
 
 .row-actions {
@@ -807,15 +1359,15 @@ onBeforeUnmount(() => {
 }
 
 .action-btn {
-  height: 32px;
-  min-width: 78px;
+  min-width: 64px;
+  height: 34px;
   padding: 0 12px;
-  border: 1px solid #d8d1cb;
+  border: 1px solid #202124;
   border-radius: 0;
-  background: #f8f5f2;
-  color: #111827;
+  background: #ffffff;
+  color: #202124;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -824,16 +1376,81 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-.action-btn--active {
-  border-color: #111827;
-  background: #111827;
-  color: #ffffff;
-}
-
 .action-btn--danger {
   border-color: #a94442;
-  background: #a94442;
-  color: #ffffff;
+  color: #a94442;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.modal-card {
+  width: min(100%, 680px);
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 0;
+  padding: 18px;
+  box-shadow: 0 16px 36px rgba(17, 24, 39, 0.16);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.detail-list {
+  margin-bottom: 14px;
+  border-bottom: 1px solid #eceff3;
+  padding: 10px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-key {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.detail-value {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.modal-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-cancel {
+  height: 44px;
+  border-color: #202124;
+  background: #ffffff;
+  color: #202124;
+  font-weight: 700;
+}
+
+.modal-save {
+  max-width: 180px;
 }
 
 @media (max-width: 980px) {
@@ -852,6 +1469,11 @@ onBeforeUnmount(() => {
   }
 
   .list-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal-footer {
     flex-direction: column;
     align-items: stretch;
   }

@@ -226,13 +226,15 @@ async function onReject(id) {
   background: rgba(255, 255, 255, 0.1);
 }
 .banner {
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 0;
+  font-size: 13px;
 }
 .banner--error {
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
 }
 .empty {
   margin-top: 16px;

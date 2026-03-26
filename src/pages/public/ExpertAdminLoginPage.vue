@@ -345,10 +345,10 @@ input::placeholder {
 .error {
   border: 1px solid rgba(217, 83, 60, 0.4);
   background: rgba(217, 83, 60, 0.12);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 12px;
-  color: #7f1d1d;
-  font-size: 0.9rem;
+  color: #991b1b;
+  font-size: 13px;
 }
 
 .hint {

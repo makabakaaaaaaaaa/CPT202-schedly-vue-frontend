@@ -22,17 +22,27 @@ const editName = ref('')
 const editDesc = ref('')
 const updating = ref(false)
 const deletingId = ref('')
+const editNameFocused = ref(false)
+const editDescFocused = ref(false)
+const editNameLimitError = ref('')
+const editDescLimitError = ref('')
 
 const NAME_MAX = 50
 const DESC_MAX = 300
 
 const showNameHelper = computed(() => nameFocused.value || !!nameLimitError.value)
 const showDescHelper = computed(() => descFocused.value || !!descLimitError.value)
+const showEditNameHelper = computed(() => editNameFocused.value || !!editNameLimitError.value)
+const showEditDescHelper = computed(() => editDescFocused.value || !!editDescLimitError.value)
 
 const filteredItems = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return items.value
   return items.value.filter((row) => String(row?.name ?? '').toLowerCase().includes(q))
+})
+const expertiseCountLabel = computed(() => {
+  const count = items.value.length
+  return `${count} expertise item${count === 1 ? '' : 's'}`
 })
 
 function rowId(row) {
@@ -66,6 +76,28 @@ function onDescBlur() {
   }
 }
 
+function onEditNameFocus() {
+  editNameFocused.value = true
+}
+
+function onEditNameBlur() {
+  editNameFocused.value = false
+  if (editName.value.length <= NAME_MAX) {
+    editNameLimitError.value = ''
+  }
+}
+
+function onEditDescFocus() {
+  editDescFocused.value = true
+}
+
+function onEditDescBlur() {
+  editDescFocused.value = false
+  if (editDesc.value.length <= DESC_MAX) {
+    editDescLimitError.value = ''
+  }
+}
+
 watch(createName, (val) => {
   if (val.length > NAME_MAX) {
     createName.value = val.slice(0, NAME_MAX)
@@ -85,6 +117,28 @@ watch(createDesc, (val) => {
   }
   if (val.length < DESC_MAX) {
     descLimitError.value = ''
+  }
+})
+
+watch(editName, (val) => {
+  if (val.length > NAME_MAX) {
+    editName.value = val.slice(0, NAME_MAX)
+    editNameLimitError.value = `Maximum ${NAME_MAX} characters allowed.`
+    return
+  }
+  if (val.length < NAME_MAX) {
+    editNameLimitError.value = ''
+  }
+})
+
+watch(editDesc, (val) => {
+  if (val.length > DESC_MAX) {
+    editDesc.value = val.slice(0, DESC_MAX)
+    editDescLimitError.value = `Maximum ${DESC_MAX} characters allowed.`
+    return
+  }
+  if (val.length < DESC_MAX) {
+    editDescLimitError.value = ''
   }
 })
 
@@ -136,6 +190,10 @@ function openEdit(row) {
   editId.value = id
   editName.value = String(row?.name ?? '')
   editDesc.value = rowDesc(row)
+  editNameFocused.value = false
+  editDescFocused.value = false
+  editNameLimitError.value = ''
+  editDescLimitError.value = ''
   editOpen.value = true
 }
 
@@ -145,6 +203,10 @@ function closeEdit() {
   editId.value = ''
   editName.value = ''
   editDesc.value = ''
+  editNameFocused.value = false
+  editDescFocused.value = false
+  editNameLimitError.value = ''
+  editDescLimitError.value = ''
 }
 
 async function onUpdate() {
@@ -269,9 +331,8 @@ onMounted(load)
       <div class="list-toolbar">
         <div class="toolbar-title">
           <h2 class="card-title">Expertise List</h2>
-          <p class="muted small">
-            Total: {{ items.length }}
-            <span v-if="searchQuery"> | Matched: {{ filteredItems.length }}</span>
+          <p v-if="searchQuery" class="muted small">
+            Matched: {{ filteredItems.length }}
           </p>
         </div>
 
@@ -287,6 +348,10 @@ onMounted(load)
             {{ loading ? 'Loading...' : 'Refresh' }}
           </button>
         </div>
+      </div>
+
+      <div class="toolbar-meta">
+        <span class="meta-pill">{{ expertiseCountLabel }}</span>
       </div>
 
       <div v-if="loading && !items.length" class="state muted">Loading...</div>
@@ -338,8 +403,16 @@ onMounted(load)
 
     <div v-if="editOpen" class="modal-backdrop" @click.self="closeEdit">
       <section class="modal-card">
-        <h3 class="modal-title">Edit Expertise</h3>
-        <p class="muted small">ID: <span class="mono">{{ editId }}</span></p>
+        <div class="panel-head">
+          <h3 class="modal-title">Edit Expertise</h3>
+        </div>
+
+        <div class="detail-list">
+          <div class="detail-row">
+            <span class="detail-key">Expertise ID</span>
+            <span class="detail-value mono">{{ editId || '--' }}</span>
+          </div>
+        </div>
 
         <div class="modal-form">
           <input
@@ -349,21 +422,53 @@ onMounted(load)
             placeholder="Name"
             aria-label="Edit expertise name"
             maxlength="50"
+            @focus="onEditNameFocus"
+            @blur="onEditNameBlur"
           />
+
+          <div
+            v-if="showEditNameHelper"
+            class="limit-helper"
+            :class="{ 'limit-helper--error': editNameLimitError }"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="limit-helper__text">{{ editNameLimitError || `Maximum ${NAME_MAX} characters` }}</p>
+            <p class="limit-helper__count">{{ editName.length }}/{{ NAME_MAX }}</p>
+          </div>
+
           <textarea
             v-model="editDesc"
             class="input input--area"
             placeholder="Description (optional)"
             aria-label="Edit expertise description"
             maxlength="300"
+            @focus="onEditDescFocus"
+            @blur="onEditDescBlur"
           ></textarea>
+
+          <div
+            v-if="showEditDescHelper"
+            class="limit-helper"
+            :class="{ 'limit-helper--error': editDescLimitError }"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="limit-helper__text">{{ editDescLimitError || `Maximum ${DESC_MAX} characters` }}</p>
+            <p class="limit-helper__count">{{ editDesc.length }}/{{ DESC_MAX }}</p>
+          </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn-neutral" :disabled="updating" @click="closeEdit">
+          <button type="button" class="btn-neutral modal-cancel" :disabled="updating" @click="closeEdit">
             Cancel
           </button>
-          <button type="button" class="btn-primary btn-primary--fit modal-save" :disabled="updating" @click="onUpdate">
+          <button
+            type="button"
+            class="btn-primary btn-primary--fit modal-save"
+            :disabled="updating"
+            @click="onUpdate"
+          >
             {{ updating ? 'Saving...' : 'Save Changes' }}
           </button>
         </div>
@@ -407,6 +512,10 @@ onMounted(load)
   margin: 0 0 12px;
   font-size: 16px;
   font-weight: 700;
+}
+
+.panel-head {
+  margin-bottom: 12px;
 }
 
 .create-form {
@@ -499,6 +608,22 @@ onMounted(load)
   gap: 8px;
 }
 
+.toolbar-meta {
+  margin: 12px 0;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d8d1cb;
+  background: #f8f5f2;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .search-input {
   width: min(320px, 50vw);
 }
@@ -527,7 +652,7 @@ onMounted(load)
 }
 
 .banner {
-  margin-top: 12px;
+  margin-top: 14px;
   padding: 10px 12px;
   border-radius: 0;
   font-size: 13px;
@@ -536,6 +661,7 @@ onMounted(load)
 .banner--error {
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
 }
 
 .banner--success {
@@ -613,19 +739,20 @@ onMounted(load)
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .action-btn {
-  height: 32px;
-  width: 74px;
-  padding: 0;
-  border: 1px solid #d8d1cb;
+  min-width: 64px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #202124;
   border-radius: 0;
-  background: #f8f5f2;
-  color: #111827;
+  background: #ffffff;
+  color: #202124;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -638,9 +765,9 @@ onMounted(load)
 }
 
 .action-btn--danger {
-  border-color: #000000;
-  background: #000000;
-  color: #ffffff;
+  border-color: #a94442;
+  background: #ffffff;
+  color: #a94442;
 }
 
 .modal-backdrop {
@@ -664,24 +791,59 @@ onMounted(load)
 .modal-title {
   margin: 0;
   font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.detail-list {
+  margin-bottom: 14px;
+  border-bottom: 1px solid #eceff3;
+  padding: 10px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-key {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.detail-value {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
 }
 
 .modal-form {
-  margin-top: 12px;
   display: grid;
   gap: 10px;
 }
 
 .modal-footer {
-  margin-top: 12px;
+  margin-top: 8px;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
+}
+
+.modal-cancel {
+  height: 44px;
+  border-color: #202124;
+  background: #ffffff;
+  color: #202124;
+  font-weight: 700;
 }
 
 .modal-save {
-  width: auto !important;
-  min-width: 150px;
+  max-width: 180px;
 }
 
 @media (max-width: 920px) {
@@ -702,6 +864,11 @@ onMounted(load)
 
   .input--area {
     min-height: 104px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

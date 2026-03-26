@@ -1,31 +1,99 @@
-﻿<script setup>
+<script setup>
 import { computed, ref } from 'vue'
 import { api } from '@/api/client'
 
 const specialistId = ref('')
-const duration = ref(60)
-const type = ref('online')
+const resolvedSpecialistId = ref('')
+const resolvedSpecialistName = ref('')
+const duration = ref(null)
+const type = ref('')
 const loading = ref(false)
 const error = ref('')
 const quote = ref(null)
+const quoteResults = ref([])
+const resultMode = ref('idle')
 const history = ref([])
-const durationOptions = [30, 45, 60, 90]
+const specialistDirectory = ref([])
+const specialistDirectoryLoaded = ref(false)
 
-const hasQuote = computed(() => !!quote.value)
+const durationOptions = [30, 45, 60, 90]
+const sessionTypeOptions = [
+  { label: 'Online', value: 'online' },
+  { label: 'Offline', value: 'offline' }
+]
+
+const hasDuration = computed(() => {
+  const mins = Number(duration.value)
+  return Number.isFinite(mins) && mins > 0
+})
+
+const hasType = computed(() => !!String(type.value || '').trim())
+const hasQuote = computed(() => resultMode.value === 'single' && !!quote.value)
+const hasResultList = computed(() => resultMode.value === 'list' && quoteResults.value.length > 0)
+const isListMode = computed(() => resultMode.value === 'list')
+const resultCountLabel = computed(() => {
+  const count = quoteResults.value.length
+  return `${count} result${count === 1 ? '' : 's'}`
+})
+
 const quoteAmount = computed(
   () => quote.value?.amount ?? quote.value?.totalAmount ?? quote.value?.total ?? quote.value?.price ?? null
 )
 const quoteCurrency = computed(() => quote.value?.currency ?? 'USD')
-const quoteSpecialist = computed(() => quote.value?.specialistId ?? specialistId.value)
+const quoteSpecialist = computed(() => {
+  return buildSpecialistLabel(
+    quote.value?.specialistId ?? resolvedSpecialistId.value ?? specialistId.value.trim(),
+    resolvedSpecialistName.value
+  )
+})
 const quoteDuration = computed(() => {
   const fallback = Number(duration.value)
-  return quote.value?.duration ?? (Number.isFinite(fallback) ? fallback : 0)
+  const value = quote.value?.duration ?? (Number.isFinite(fallback) ? fallback : null)
+  return Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null
 })
-const quoteType = computed(() => quote.value?.type ?? type.value)
+const quoteType = computed(() => quote.value?.type ?? type.value ?? '')
+const quoteTypeLabel = computed(() => formatTypeLabel(quoteType.value))
+const formattedAmount = computed(() => formatCurrency(quoteAmount.value, quoteCurrency.value))
+const quoteSummary = computed(() => buildQuoteSummary(quoteDuration.value, quoteType.value))
+const previewHint = computed(() => {
+  if (hasQuote.value) return 'Exact quote result'
+  if (hasResultList.value) return 'Available quote combinations'
+  if (loading.value) return 'Calculating quotes...'
+  return 'Enter a specialist only to browse combinations, or add all filters for one exact quote.'
+})
+const emptyPreviewMessage = computed(() => {
+  if (loading.value) return 'Calculating quotes...'
+  if (resultMode.value === 'list') {
+    return 'No available quote combinations were found for the current specialist and filters.'
+  }
+  return 'Enter a specialist only to browse all available quote combinations, or add duration and session type for a single exact quote.'
+})
+
+function getTypeOrder(value) {
+  return sessionTypeOptions.findIndex((option) => option.value === value)
+}
+
+function formatTypeLabel(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  const match = sessionTypeOptions.find((option) => option.value === normalized)
+  return match?.label ?? (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : '--')
+}
+
+function formatDurationLabel(value) {
+  const mins = Number(value)
+  return Number.isFinite(mins) && mins > 0 ? `${mins} minutes` : '--'
+}
+
+function buildSpecialistLabel(idValue, nameValue = '') {
+  const id = String(idValue || '').trim()
+  const name = String(nameValue || '').trim()
+  if (name && id) return `${name} (${id})`
+  return name || id || '--'
+}
 
 function formatCurrency(amountValue, currencyValue = 'USD') {
   const amount = Number(amountValue)
-  if (!Number.isFinite(amount)) return '—'
+  if (!Number.isFinite(amount)) return '--'
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -39,60 +107,249 @@ function formatCurrency(amountValue, currencyValue = 'USD') {
 
 function buildQuoteSummary(durationValue, typeValue) {
   const mins = Number(durationValue)
-  const typeText = String(typeValue || '').toLowerCase() === 'offline' ? 'offline' : 'online'
-  if (!Number.isFinite(mins) || mins <= 0) return `Consultation session (${typeText})`
+  const normalizedType = String(typeValue || '').toLowerCase()
+  const typeText = normalizedType ? ` ${normalizedType}` : ''
+  if (!Number.isFinite(mins) || mins <= 0) return `Consultation session${typeText}`.trim()
   if (mins % 60 === 0) {
     const hours = mins / 60
-    return `${hours} hour${hours > 1 ? 's' : ''} ${typeText} session`
+    return `${hours} hour${hours > 1 ? 's' : ''}${typeText} session`
   }
-  return `${mins} minute ${typeText} session`
+  return `${mins} minute${typeText} session`
 }
 
-const formattedAmount = computed(() => {
-  return formatCurrency(quoteAmount.value, quoteCurrency.value)
-})
+function toggleDuration(mins) {
+  duration.value = Number(duration.value) === mins ? null : mins
+}
 
-const quoteSummary = computed(() => {
-  return buildQuoteSummary(quoteDuration.value, quoteType.value)
-})
+function toggleType(nextType) {
+  type.value = type.value === nextType ? '' : nextType
+}
 
-function appendHistoryItem() {
-  const amount =
-    quote.value?.amount ?? quote.value?.totalAmount ?? quote.value?.total ?? quote.value?.price ?? null
-  const currency = quote.value?.currency ?? 'USD'
-  const rowDuration = quote.value?.duration ?? (Number.isFinite(Number(duration.value)) ? Number(duration.value) : 0)
-  const rowType = quote.value?.type ?? type.value
-  history.value.unshift({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    specialistId: quote.value?.specialistId ?? specialistId.value.trim(),
-    duration: rowDuration,
-    type: rowType,
+function resetResults() {
+  quote.value = null
+  quoteResults.value = []
+  resultMode.value = 'idle'
+}
+
+async function ensureSpecialistDirectory() {
+  if (specialistDirectoryLoaded.value) return specialistDirectory.value
+  const page = await api.listSpecialists({ pageSize: 100 })
+  specialistDirectory.value = Array.isArray(page?.items) ? page.items : []
+  specialistDirectoryLoaded.value = true
+  return specialistDirectory.value
+}
+
+async function resolveSpecialistReference(inputValue) {
+  const query = String(inputValue || '').trim()
+  if (!query) return { specialistId: '', specialistName: '' }
+
+  try {
+    const items = await ensureSpecialistDirectory()
+    const normalizedQuery = query.toLowerCase()
+    const exactIdMatch = items.find((row) => String(row?.id ?? '').trim().toLowerCase() === normalizedQuery)
+    if (exactIdMatch) {
+      return {
+        specialistId: String(exactIdMatch.id),
+        specialistName: String(exactIdMatch.name ?? '').trim()
+      }
+    }
+
+    const exactNameMatches = items.filter(
+      (row) => String(row?.name ?? '').trim().toLowerCase() === normalizedQuery
+    )
+    if (exactNameMatches.length === 1) {
+      return {
+        specialistId: String(exactNameMatches[0].id),
+        specialistName: String(exactNameMatches[0].name ?? '').trim()
+      }
+    }
+
+    const partialNameMatches = items.filter((row) =>
+      String(row?.name ?? '').trim().toLowerCase().includes(normalizedQuery)
+    )
+    if (partialNameMatches.length === 1) {
+      return {
+        specialistId: String(partialNameMatches[0].id),
+        specialistName: String(partialNameMatches[0].name ?? '').trim()
+      }
+    }
+
+    if (exactNameMatches.length > 1 || partialNameMatches.length > 1) {
+      throw new Error('Multiple specialists matched that name. Please use the specialist ID.')
+    }
+  } catch (e) {
+    if (e?.message === 'Multiple specialists matched that name. Please use the specialist ID.') {
+      throw e
+    }
+  }
+
+  return { specialistId: query, specialistName: '' }
+}
+
+function createQuoteRecord(source, fallback) {
+  const amount = source?.amount ?? source?.totalAmount ?? source?.total ?? source?.price ?? null
+  const currency = source?.currency ?? 'USD'
+  const rawDuration = source?.duration ?? fallback.duration ?? null
+  const rawType = source?.type ?? fallback.type ?? ''
+  const normalizedDuration = Number.isFinite(Number(rawDuration)) && Number(rawDuration) > 0 ? Number(rawDuration) : null
+  const normalizedType = String(rawType || '').trim().toLowerCase()
+  const detail = String(source?.detail ?? source?.description ?? source?.summary ?? '').trim()
+  const summary = buildQuoteSummary(normalizedDuration, normalizedType)
+
+  return {
+    id: [
+      fallback.specialistId,
+      normalizedDuration ?? 'na',
+      normalizedType || 'na',
+      amount ?? 'na',
+      currency,
+      detail || summary
+    ].join(':'),
+    specialistId: String(source?.specialistId ?? fallback.specialistId ?? '').trim(),
+    specialistName: fallback.specialistName ?? '',
+    specialistDisplay: buildSpecialistLabel(
+      source?.specialistId ?? fallback.specialistId ?? '',
+      fallback.specialistName ?? ''
+    ),
+    duration: normalizedDuration,
+    type: normalizedType,
     amount,
     currency,
-    summary: buildQuoteSummary(rowDuration, rowType),
-    createdAt: new Date().toISOString()
+    summary,
+    detail: detail && detail !== summary ? detail : ''
+  }
+}
+
+function dedupeQuoteResults(rows) {
+  const map = new Map()
+  for (const row of rows) {
+    const key = [row.specialistId, row.duration ?? '', row.type || '', row.amount ?? '', row.currency || ''].join('|')
+    if (!map.has(key)) map.set(key, row)
+  }
+  return Array.from(map.values())
+}
+
+function sortQuoteResults(rows) {
+  return [...rows].sort((a, b) => {
+    const durationA = a.duration ?? Number.MAX_SAFE_INTEGER
+    const durationB = b.duration ?? Number.MAX_SAFE_INTEGER
+    if (durationA !== durationB) return durationA - durationB
+
+    const typeOrderA = getTypeOrder(a.type)
+    const typeOrderB = getTypeOrder(b.type)
+    if (typeOrderA !== typeOrderB) return typeOrderA - typeOrderB
+
+    const amountA = Number(a.amount)
+    const amountB = Number(b.amount)
+    if (Number.isFinite(amountA) && Number.isFinite(amountB) && amountA !== amountB) {
+      return amountA - amountB
+    }
+
+    return String(a.specialistId || '').localeCompare(String(b.specialistId || ''))
   })
+}
+
+function appendHistoryItems(rows) {
+  if (!Array.isArray(rows) || !rows.length) return
+  const createdAt = new Date().toISOString()
+  const items = rows.map((row, index) => ({
+    id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    specialistId: row.specialistId,
+    specialistDisplay: row.specialistDisplay,
+    duration: row.duration,
+    type: row.type,
+    amount: row.amount,
+    currency: row.currency,
+    summary: row.detail || row.summary,
+    createdAt
+  }))
+  history.value = items.concat(history.value)
 }
 
 function clearHistory() {
   history.value = []
 }
 
+function buildQuoteCombinations() {
+  const selectedDuration = hasDuration.value ? Number(duration.value) : null
+  const selectedType = hasType.value ? String(type.value).trim().toLowerCase() : ''
+  const durations = selectedDuration ? [selectedDuration] : durationOptions
+  const types = selectedType ? [selectedType] : sessionTypeOptions.map((option) => option.value)
+
+  return durations.flatMap((mins) =>
+    types.map((sessionType) => ({
+      duration: mins,
+      type: sessionType
+    }))
+  )
+}
+
 async function onQuote() {
   error.value = ''
-  quote.value = null
+  resetResults()
+
   if (!specialistId.value.trim()) {
-    error.value = 'Please enter specialistId'
+    error.value = 'Please enter a specialist name or ID'
     return
   }
+
   loading.value = true
+
   try {
-    quote.value = await api.quotePricing({
-      specialistId: specialistId.value.trim(),
-      duration: duration.value ? Number(duration.value) : undefined,
-      type: type.value.trim() || undefined
-    })
-    appendHistoryItem()
+    const resolved = await resolveSpecialistReference(specialistId.value)
+    resolvedSpecialistId.value = resolved.specialistId
+    resolvedSpecialistName.value = resolved.specialistName
+
+    if (hasDuration.value && hasType.value) {
+      const response = await api.quotePricing({
+        specialistId: resolved.specialistId,
+        duration: Number(duration.value),
+        type: String(type.value).trim().toLowerCase()
+      })
+      const record = createQuoteRecord(response, {
+        specialistId: resolved.specialistId,
+        specialistName: resolved.specialistName,
+        duration: Number(duration.value),
+        type: String(type.value).trim().toLowerCase()
+      })
+      quote.value = response
+      resultMode.value = 'single'
+      appendHistoryItems([record])
+      return
+    }
+
+    const combinations = buildQuoteCombinations()
+    const settled = await Promise.allSettled(
+      combinations.map((combo) =>
+        api.quotePricing({
+          specialistId: resolved.specialistId,
+          duration: combo.duration,
+          type: combo.type
+        }).then((response) =>
+          createQuoteRecord(response, {
+            specialistId: resolved.specialistId,
+            specialistName: resolved.specialistName,
+            duration: combo.duration,
+            type: combo.type
+          })
+        )
+      )
+    )
+
+    const successful = settled.filter((row) => row.status === 'fulfilled').map((row) => row.value)
+    const normalizedResults = sortQuoteResults(dedupeQuoteResults(successful))
+
+    if (!normalizedResults.length) {
+      const firstFailure = settled.find((row) => row.status === 'rejected')
+      error.value =
+        firstFailure?.reason?.message || 'No quote combinations available for this specialist'
+      resultMode.value = 'list'
+      return
+    }
+
+    quoteResults.value = normalizedResults
+    resultMode.value = 'list'
+    appendHistoryItems(normalizedResults)
   } catch (e) {
     error.value = e?.message || 'Failed to get quote'
   } finally {
@@ -111,91 +368,158 @@ async function onQuote() {
     </header>
 
     <div class="calculator-layout">
-      <section class="calc-card">
-        <h2 class="card-title">Quote Setup</h2>
-        <label class="field">
-          <span class="label">Specialist ID</span>
-          <input v-model="specialistId" class="input" placeholder="Enter specialist ID (e.g. sp-1)" />
-        </label>
-
-        <div class="field">
-          <span class="label">Duration</span>
-          <div class="option-row">
-            <button
-              v-for="mins in durationOptions"
-              :key="mins"
-              type="button"
-              class="option-btn"
-              :class="{ 'option-btn--active': Number(duration) === mins }"
-              @click="duration = mins"
-            >
-              {{ mins }}m
-            </button>
+      <section class="calc-card setup-card">
+        <div class="panel-head">
+          <div>
+            <h2 class="card-title">Quote Setup</h2>
+            <p class="panel-note">Leave duration or session type unselected to browse available combinations.</p>
           </div>
         </div>
 
-        <div class="field">
-          <span class="label">Session Type</span>
-          <div class="option-row type-row">
-            <button
-              type="button"
-              class="option-btn option-btn--type"
-              :class="{ 'option-btn--active': type === 'online' }"
-              @click="type = 'online'"
-            >
-              Online
-            </button>
-            <button
-              type="button"
-              class="option-btn option-btn--type"
-              :class="{ 'option-btn--active': type === 'offline' }"
-              @click="type = 'offline'"
-            >
-              Offline
-            </button>
+        <div class="setup-card__body">
+          <label class="field">
+            <span class="label">Specialist</span>
+            <input
+              v-model="specialistId"
+              class="input"
+              placeholder="Enter specialist ID or name (e.g. sp-1)"
+            />
+          </label>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="label">Duration</span>
+              <span class="field-state" :class="{ 'field-state--selected': hasDuration }">
+                {{ hasDuration ? `${duration} minutes` : 'Not selected' }}
+              </span>
+            </div>
+
+            <div class="option-row">
+              <button
+                v-for="mins in durationOptions"
+                :key="mins"
+                type="button"
+                class="option-btn"
+                :class="{ 'option-btn--active': Number(duration) === mins }"
+                @click="toggleDuration(mins)"
+              >
+                {{ mins }}m
+              </button>
+            </div>
+
+            <p class="field-hint">
+              {{ hasDuration ? 'Click the active option again to clear this filter.' : 'No duration selected yet.' }}
+            </p>
           </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="label">Session Type</span>
+              <span class="field-state" :class="{ 'field-state--selected': hasType }">
+                {{ hasType ? formatTypeLabel(type) : 'Not selected' }}
+              </span>
+            </div>
+
+            <div class="option-row type-row">
+              <button
+                v-for="option in sessionTypeOptions"
+                :key="option.value"
+                type="button"
+                class="option-btn option-btn--type"
+                :class="{ 'option-btn--active': type === option.value }"
+                @click="toggleType(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <p class="field-hint">
+              {{ hasType ? 'Click the active option again to clear this filter.' : 'No session type selected yet.' }}
+            </p>
+          </div>
+
+          <button type="button" class="btn-primary" :disabled="loading" @click="onQuote">
+            {{ loading ? 'Calculating...' : 'Calculate Quote' }}
+          </button>
+
+          <div v-if="error" class="banner banner--error" role="alert">{{ error }}</div>
         </div>
-
-        <button type="button" class="btn-primary" :disabled="loading" @click="onQuote">
-          {{ loading ? 'Calculating…' : 'Calculate Quote' }}
-        </button>
-
-        <div v-if="error" class="banner banner--error" role="alert">{{ error }}</div>
       </section>
 
       <section class="calc-card preview-card">
-        <h2 class="card-title">Quote Preview</h2>
+        <div class="panel-head panel-head--split">
+          <div>
+            <h2 class="card-title">Quote Preview</h2>
+            <p class="panel-note">{{ previewHint }}</p>
+          </div>
+          <span v-if="isListMode && quoteResults.length" class="result-count">{{ resultCountLabel }}</span>
+        </div>
 
-        <template v-if="hasQuote">
-          <div class="amount-block">
-            <div class="amount-label">Total Price</div>
-            <div class="amount">{{ formattedAmount }}</div>
+        <div class="preview-card__body">
+          <template v-if="hasQuote">
+            <div class="amount-block">
+              <div class="amount-label">Total Price</div>
+              <div class="amount">{{ formattedAmount }}</div>
+            </div>
+
+            <p class="summary">{{ quoteSummary }}</p>
+
+            <div v-if="quote.value?.detail" class="detail-copy">{{ quote.value.detail }}</div>
+
+            <div class="detail-list">
+              <div class="detail-row">
+                <span class="detail-key">Specialist</span>
+                <span class="detail-value">{{ quoteSpecialist }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Duration</span>
+                <span class="detail-value">{{ formatDurationLabel(quoteDuration) }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Session Type</span>
+                <span class="detail-value">{{ quoteTypeLabel }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Currency</span>
+                <span class="detail-value">{{ quoteCurrency || '--' }}</span>
+              </div>
+            </div>
+          </template>
+
+          <div v-else-if="hasResultList" class="results-list">
+            <article v-for="row in quoteResults" :key="row.id" class="result-item">
+              <div class="result-item__top">
+                <div class="result-item__copy">
+                  <div class="result-item__summary">{{ row.summary }}</div>
+                  <div v-if="row.detail" class="result-item__detail">{{ row.detail }}</div>
+                </div>
+                <div class="result-item__amount">{{ formatCurrency(row.amount, row.currency) }}</div>
+              </div>
+
+              <div class="result-item__meta">
+                <div class="detail-row">
+                  <span class="detail-key">Specialist</span>
+                  <span class="detail-value">{{ row.specialistDisplay }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Duration</span>
+                  <span class="detail-value">{{ formatDurationLabel(row.duration) }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Session Type</span>
+                  <span class="detail-value">{{ formatTypeLabel(row.type) }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Currency</span>
+                  <span class="detail-value">{{ row.currency || '--' }}</span>
+                </div>
+              </div>
+            </article>
           </div>
 
-          <p class="summary">{{ quoteSummary }}</p>
-
-          <div class="detail-list">
-            <div class="detail-row">
-              <span class="detail-key">Specialist</span>
-              <span class="detail-value">{{ quoteSpecialist || '—' }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">Duration</span>
-              <span class="detail-value">{{ quoteDuration || '—' }} minutes</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">Type</span>
-              <span class="detail-value">{{ quoteType || '—' }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">Currency</span>
-              <span class="detail-value">{{ quoteCurrency || '—' }}</span>
-            </div>
+          <div v-else class="empty-preview">
+            {{ emptyPreviewMessage }}
           </div>
-        </template>
-
-        <div v-else class="empty-preview">
-          Configure quote setup and click Calculate Quote to preview pricing.
         </div>
       </section>
     </div>
@@ -227,10 +551,10 @@ async function onQuote() {
             <div class="history-summary">{{ row.summary }}</div>
           </div>
           <div class="history-meta">
-            <span><b>Specialist:</b> {{ row.specialistId || '—' }}</span>
-            <span><b>Duration:</b> {{ row.duration || '—' }} minutes</span>
-            <span><b>Type:</b> {{ row.type || '—' }}</span>
-            <span><b>Currency:</b> {{ row.currency || '—' }}</span>
+            <span><b>Specialist:</b> {{ row.specialistDisplay || row.specialistId || '--' }}</span>
+            <span><b>Duration:</b> {{ formatDurationLabel(row.duration) }}</span>
+            <span><b>Type:</b> {{ formatTypeLabel(row.type) }}</span>
+            <span><b>Currency:</b> {{ row.currency || '--' }}</span>
           </div>
         </article>
       </div>
@@ -262,6 +586,7 @@ async function onQuote() {
   display: grid;
   grid-template-columns: minmax(300px, 0.95fr) minmax(320px, 1.05fr);
   gap: 14px;
+  align-items: start;
 }
 
 .calc-card {
@@ -272,10 +597,57 @@ async function onQuote() {
   box-shadow: 0 8px 18px rgba(17, 24, 39, 0.06);
 }
 
+.setup-card,
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+  max-height: 460px;
+}
+
+.setup-card__body,
+.preview-card__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.panel-head {
+  margin-bottom: 12px;
+}
+
+.panel-head--split {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.panel-note {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .card-title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 16px;
   font-weight: 700;
+}
+
+.result-count {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d8d1cb;
+  background: #f8f5f2;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .field {
@@ -284,10 +656,36 @@ async function onQuote() {
   margin-bottom: 14px;
 }
 
+.field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
 .label {
   font-size: 13px;
   color: #4b5563;
   font-weight: 600;
+}
+
+.field-state {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-state--selected {
+  color: #111827;
+}
+
+.field-hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .input {
@@ -315,6 +713,7 @@ async function onQuote() {
   color: #374151;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
 .option-btn--type {
@@ -345,7 +744,7 @@ async function onQuote() {
 }
 
 .banner {
-  margin-top: 12px;
+  margin-top: 14px;
   padding: 10px 12px;
   border-radius: 0;
   font-size: 13px;
@@ -354,12 +753,7 @@ async function onQuote() {
 .banner--error {
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.12);
-}
-
-.preview-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 332px;
+  color: #991b1b;
 }
 
 .amount-block {
@@ -390,6 +784,16 @@ async function onQuote() {
   font-size: 14px;
 }
 
+.detail-copy {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #eceff3;
+  background: #fafafa;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .detail-list {
   margin-top: 14px;
   border-top: 1px solid #eceff3;
@@ -414,6 +818,58 @@ async function onQuote() {
   font-size: 13px;
   color: #111827;
   font-weight: 600;
+  text-align: right;
+}
+
+.results-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-item {
+  border: 1px solid #d8d1cb;
+  background: #ffffff;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.result-item__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.result-item__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.result-item__summary {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.result-item__detail {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+.result-item__amount {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.result-item__meta {
+  border-top: 1px solid #eceff3;
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
 }
 
 .empty-preview {
@@ -529,17 +985,31 @@ async function onQuote() {
   .calculator-layout {
     grid-template-columns: 1fr;
   }
+
+  .setup-card,
   .preview-card {
     min-height: auto;
+    max-height: none;
   }
+
+  .setup-card__body,
+  .preview-card__body {
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .history-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .history-main {
+
+  .history-main,
+  .result-item__top,
+  .panel-head--split {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: 8px;
   }
+
   .history-head {
     flex-direction: column;
   }

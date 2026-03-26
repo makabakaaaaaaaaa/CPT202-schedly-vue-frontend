@@ -227,13 +227,15 @@ onMounted(load)
   opacity: 0.72;
 }
 .banner {
-  margin-top: 12px;
-  padding: 10px 14px;
+  margin-top: 14px;
+  padding: 10px 12px;
   border-radius: 0;
+  font-size: 13px;
 }
 .banner--error {
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
 }
 
 @media (max-width: 760px) {
